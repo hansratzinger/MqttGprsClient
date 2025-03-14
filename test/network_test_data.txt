@@ -1,0 +1,24 @@
+
+========INIT========
+========SIMCOMATI======
+
+Revision:1529B08SIM7000G
+CSUB:V01
+APRev:1529B08SIM7000,V01
+QCN:MDM9206_TX3.0.SIM7000G_P1.03_20220415
+IMEI:869951036750879
+
+=======================
+=====Preferred mode selection=====
+
++CNMP: 2
+
+=======================
+=====Preferred selection between CAT-M and NB-IoT=====
+
++CMNB: 2
+
+=======================
+Modem Name: SIMCOM_Ltd SIMCOM_SIM7000G
+Modem Info: SIM7000G R1529
+Try 2 method

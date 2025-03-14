@@ -1,0 +1,5 @@
+Bitte erstelle ein Programm,das folgende Verarbeitung durchführt.
+
+Hardware Lilygo SIM7000G
+- UART Input in MQTT Format
+- MQTT Daten werden per GPRS an MQTT Broker gesendet
