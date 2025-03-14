@@ -98,7 +98,7 @@
  
  int ledStatus = LOW;
  unsigned long lastPublishTime = 0; // Variable to store the last publish time
- const unsigned long publishInterval = 900; // Interval to publish data (e.g., every 5 seconds)
+ const unsigned long publishInterval = 100; // Interval to publish data (e.g., every 5 seconds)
  
  uint32_t lastReconnectAttempt = 0;
  
