@@ -68,6 +68,7 @@
  #include <SPI.h>
  #include <SD.h>
  #include <ArduinoJson.h>
+ #include <queue>
  
  #ifdef DUMP_AT_COMMANDS
  #include <StreamDebugger.h>
@@ -80,6 +81,15 @@
  PubSubClient  mqtt(client);
  
  Ticker tick;
+
+ std::queue<String> dataQueue; // Queue to store the data
+
+unsigned long lastPublishTime = 0; // Variable to store the last publish time
+const unsigned long publishInterval = 1000; // Interval to publish data (e.g., every 1 second)
+const unsigned long dataCollectionInterval = 1000; // Interval to collect data (e.g., every 1 second)
+
+unsigned long lastDataCollectionTime = 0; // Variable to store the last data collection time
+
   
  #define uS_TO_S_FACTOR 1000000ULL  // Conversion factor for micro seconds to seconds
  #define TIME_TO_SLEEP  10          // Time ESP32 will go to sleep (in seconds)
@@ -142,26 +152,61 @@
      return mqtt.connected();
  }
 
-  void publishSensorData() {
-     // Collect new data
-     float temperature = random(-10,40);
-     float pressure = random(950,1050);
-     float humidity = random(0,100);
-     float rpm = random(0,5000);
-     // Create JSON payload
-     StaticJsonDocument<200> doc;
-     doc["temperature"] = temperature;
-     doc["pressure"] = pressure;
-     doc["humidity"] = humidity;
-     doc["rpm"] = rpm;
-     char payload[200];
-     serializeJson(doc, payload);
+ void collectSensorData() {
+    // Collect new data
+    float temperature = random(-10, 40);
+    float pressure = random(950, 1050);
+    float humidity = random(0, 100);
+    float rpm = random(0, 5000);
+
+    // Create JSON payload
+    StaticJsonDocument<200> doc;
+    doc["temperature"] = temperature;
+    doc["pressure"] = pressure;
+    doc["humidity"] = humidity;
+    doc["rpm"] = rpm;
+    char payload[200];
+    serializeJson(doc, payload);
+
+    // Add data to the queue
+    dataQueue.push(String(payload));
+    SerialMon.println("Data collected: ");
+    SerialMon.println(payload);
+}
+
+
+void publishSensorData() {
+    // Publish data from the queue
+    while (!dataQueue.empty()) {
+        String payload = dataQueue.front();
+        dataQueue.pop();
+        mqtt.publish("GsmClientTest/sensorData", payload.c_str());
+        SerialMon.println("Data published: ");
+        SerialMon.println(payload);
+    }
+}
+
+
+//   void publishSensorData() {
+//      // Collect new data
+//      float temperature = random(-10,40);
+//      float pressure = random(950,1050);
+//      float humidity = random(0,100);
+//      float rpm = random(0,5000);
+//      // Create JSON payload
+//      StaticJsonDocument<200> doc;
+//      doc["temperature"] = temperature;
+//      doc["pressure"] = pressure;
+//      doc["humidity"] = humidity;
+//      doc["rpm"] = rpm;
+//      char payload[200];
+//      serializeJson(doc, payload);
  
-     // Publish data
-     mqtt.publish("GsmClientTest/sensorData", payload);
-     SerialMon.println("Data published: ");
-     SerialMon.println(payload);
- }
+//      // Publish data
+//      mqtt.publish("GsmClientTest/sensorData", payload);
+//      SerialMon.println("Data published: ");
+//      SerialMon.println(payload);
+//  }
 
  void setup()
  {
@@ -249,9 +294,7 @@
  
  }
  
- 
-void loop()
-{
+ oid loop() {
     // Make sure we're still registered on the network
     if (!modem.isNetworkConnected()) {
         SerialMon.println("Network disconnected");
@@ -296,8 +339,14 @@ void loop()
 
     mqtt.loop();
 
-    // Publish new data at regular intervals
+    // Collect new data at regular intervals
     unsigned long currentMillis = millis();
+    if (currentMillis - lastDataCollectionTime >= dataCollectionInterval) {
+        lastDataCollectionTime = currentMillis;
+        collectSensorData();
+    }
+
+    // Publish new data at regular intervals
     if (currentMillis - lastPublishTime >= publishInterval) {
         lastPublishTime = currentMillis;
         publishSensorData();
