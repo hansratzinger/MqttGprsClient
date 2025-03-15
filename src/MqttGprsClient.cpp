@@ -30,6 +30,9 @@
  // Set serial for AT commands (to the module)
  // Use Hardware Serial on Mega, Leonardo, Micro
  #define SerialAT Serial1
+
+ // Define the serial connection for UART
+ #define SerialUART Serial2
  
  // See all AT commands, if wanted
  #define DUMP_AT_COMMANDS
@@ -45,26 +48,26 @@
  // These defines are only for this example; they are not needed in other code.
  #define TINY_GSM_USE_GPRS true
  #define TINY_GSM_USE_WIFI false
- 
-   
+    
  #define uS_TO_S_FACTOR 1000000ULL  // Conversion factor for micro seconds to seconds
  #define TIME_TO_SLEEP  10          // Time ESP32 will go to sleep (in seconds)
  
- #define UART_BAUD   115200
- #define PIN_DTR     25
- #define AT_PIN_TX    1
- #define AT_PIN_RX    3
- #define PWR_PIN     4
+ #define UART_BAUD  115200
+ #define AT_BAUD    115200
+ #define PIN_DTR        25
+ #define PIN_TX          1
+ #define PIN_RX          3
+ #define AT_PIN_TX      27
+ #define AT_PIN_RX      26
+ #define UART_RX_PIN    33 // Define RX pin for Serial1
+ #define UART_TX_PIN    32 // Define TX pin for Serial1
+ #define PWR_PIN        4
  
- #define SD_MISO     2
- #define SD_MOSI     15
- #define SD_SCLK     14
- #define SD_CS       13
- #define LED_PIN     12
-
- #define SERIAL1_RX_PIN 33 // Define RX pin for Serial1
- #define SERIAL1_TX_PIN 32 // Define TX pin for Serial1
-
+ #define SD_MISO        2
+ #define SD_MOSI       15
+ #define SD_SCLK       14
+ #define SD_CS         13
+ #define LED_PIN       12
 
  // set GSM PIN, if any
  #define GSM_PIN ""
@@ -116,9 +119,9 @@ unsigned long lastDataCollectionTime = 0; // Variable to store the last data col
  
  void collectSensorData() {
     // Collect new data from Serial1
-    if (Serial1.available() > 0) {
+    if (SerialUART.available() > 0) {
         SerialMon.println("Serial1 data available");
-        String data = Serial1.readStringUntil('\n');
+        String data = SerialUART.readStringUntil('\n');
         dataQueue.push(data);
         SerialMon.println("Data collected: ");
         SerialMon.println(data);
@@ -216,11 +219,11 @@ void setup() {
     SerialMon.begin(115200);
     delay(10);
 
-    // Set serial for AT commands (to the module)
-    SerialAT.begin(UART_BAUD, SERIAL_8N1, AT_PIN_RX, AT_PIN_TX);
+    // Set serial for AT commands (to the modem)
+    SerialAT.begin(AT_BAUD, SERIAL_8N1, AT_PIN_RX, AT_PIN_TX);
 
-    // Set serial for external device (Serial1)
-    Serial1.begin(115200, SERIAL_8N1, SERIAL1_RX_PIN, SERIAL1_TX_PIN);
+    // Set serial for external device (UART)
+    SerialUART.begin(UART_BAUD, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
 
     // Initialize modem
     SerialMon.println("Initializing modem...");
