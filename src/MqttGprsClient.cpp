@@ -21,7 +21,7 @@
  * GsmClientTest/ledStatus with the newest LED status.
  *
  **************************************************************/
-
+// branch getSerialFromGateway
  #define TINY_GSM_MODEM_SIM7000
 
  // Set serial for debug console (to the Serial Monitor, default speed 115200)
@@ -55,8 +55,6 @@
  #define UART_BAUD  115200
  #define AT_BAUD    115200
  #define PIN_DTR        25
- #define PIN_TX          1
- #define PIN_RX          3
  #define AT_PIN_TX      27
  #define AT_PIN_RX      26
  #define UART_RX_PIN    33 // Define RX pin for Serial1
@@ -219,6 +217,29 @@ void setup() {
     SerialMon.begin(115200);
     delay(10);
 
+     // Set LED OFF
+     pinMode(LED_PIN, OUTPUT);
+     digitalWrite(LED_PIN, HIGH);
+     // Set PWR_PIN to HIGH to start the modem 
+     pinMode(PWR_PIN, OUTPUT);
+     digitalWrite(PWR_PIN, HIGH);
+     // Starting the machine requires at least 1 second of low level, and with a level conversion, the levels are opposite
+     delay(1000);
+     digitalWrite(PWR_PIN, LOW);
+ 
+     SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+     if (!SD.begin(SD_CS)) {
+         Serial.println("SDCard MOUNT FAIL");
+     } else {
+         uint32_t cardSize = SD.cardSize() / (1024 * 1024);
+         String str = "SDCard Size: " + String(cardSize) + "MB";
+         Serial.println(str);
+     }
+ 
+     SerialMon.println("\nWait...");
+ 
+     delay(100);
+
     // Set serial for AT commands (to the modem)
     SerialAT.begin(AT_BAUD, SERIAL_8N1, AT_PIN_RX, AT_PIN_TX);
 
@@ -229,6 +250,7 @@ void setup() {
     SerialMon.println("Initializing modem...");
     if (!modem.restart()) {
         SerialMon.println("Failed to restart modem, attempting to continue without restarting");
+        modem.init();
     } else {
         SerialMon.println("Modem restarted successfully");
     }
