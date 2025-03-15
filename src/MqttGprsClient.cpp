@@ -1,25 +1,8 @@
 /**************************************************************
- *
- * For this example, you need to install PubSubClient library:
- *   https://github.com/knolleary/pubsubclient
- *   or from http://librarymanager/all#PubSubClient
- *
- * TinyGSM Getting Started guide:
- *   https://tiny.cc/tinygsm-readme
- *
- * For more MQTT examples, see PubSubClient library
- *
- **************************************************************
- * This example connects to HiveMQ's showcase broker.
- *
- * You can quickly test sending and receiving messages from the HiveMQ webclient
- * available at http://www.hivemq.com/demos/websocket-client/.
- *
- * Subscribe to the topic GsmClientTest/ledStatus
- * Publish "toggle" to the topic GsmClientTest/led and the LED on your board
- * should toggle and you should see a new message published to
- * GsmClientTest/ledStatus with the newest LED status.
- *
+ * MqttGprsClient.cpp
+ * uses the GPRS module to connect to the internet and send data to an MQTT broker.
+ * based on the TinyGSM and PubSubClient libraries
+ * HR 2025-03-15  NK
  **************************************************************/
 // branch getSerialFromGateway
  #define TINY_GSM_MODEM_SIM7000
