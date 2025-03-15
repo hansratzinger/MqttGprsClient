@@ -67,8 +67,9 @@
  #include <Ticker.h>
  #include <SPI.h>
  #include <SD.h>
- #include <ArduinoJson.h>
  #include <queue>
+ #include <ArduinoJson.h>
+
  
  #ifdef DUMP_AT_COMMANDS
  #include <StreamDebugger.h>
@@ -105,10 +106,47 @@ unsigned long lastDataCollectionTime = 0; // Variable to store the last data col
  #define SD_SCLK     14
  #define SD_CS       13
  #define LED_PIN     12
+ #define SERIAL1_RX_PIN 3 // Define RX pin for Serial1
+ #define SERIAL1_TX_PIN 1 // Define TX pin for Serial1
+ 
+
  
  int ledStatus = LOW;
  uint32_t lastReconnectAttempt = 0;
  
+ void collectSensorData() {
+    // Collect new data from Serial1
+    if (Serial1.available() > 0) {
+        SerialMon.println("Serial1 data available");
+        String data = Serial1.readStringUntil('\n');
+        dataQueue.push(data);
+        SerialMon.println("Data collected: ");
+        SerialMon.println(data);
+    } else {
+        SerialMon.println("No data available on Serial1");
+    }
+}
+
+void publishSensorData() {
+    // Publish data from the queue
+    while (!dataQueue.empty()) {
+        String payload = dataQueue.front();
+        dataQueue.pop();
+        if (mqtt.publish("GsmClientTest/sensorData", payload.c_str())) {
+            SerialMon.println("Data published: ");
+            SerialMon.println(payload);
+        } else {
+            // If publish fails, push the data back to the queue
+            dataQueue.push(payload);
+            SerialMon.println("Failed to publish data, re-queued: ");
+            SerialMon.println(payload);
+            break; // Exit the loop to avoid infinite loop
+        }
+    }
+}
+
+
+
  void mqttCallback(char *topic, byte *payload, unsigned int len)
  { 
      SerialMon.print("Message arrived [");
@@ -149,149 +187,95 @@ unsigned long lastDataCollectionTime = 0; // Variable to store the last data col
      return mqtt.connected();
  }
 
- void collectSensorData() {
-    // Collect new data
-    float temperature = random(-10, 40);
-    float pressure = random(950, 1050);
-    float humidity = random(0, 100);
-    float rpm = random(0, 5000);
+// TEST FUNCTION
+//  void collectDemoData() {
+//     // Collect new data
+//     float temperature = random(-10, 40);
+//     float pressure = random(950, 1050);
+//     float humidity = random(0, 100);
+//     float rpm = random(0, 5000);
 
-    // Create JSON payload
-    StaticJsonDocument<200> doc;
-    doc["temperature"] = temperature;
-    doc["pressure"] = pressure;
-    doc["humidity"] = humidity;
-    doc["rpm"] = rpm;
-    char payload[200];
-    serializeJson(doc, payload);
+//     // Create JSON payload
+//     StaticJsonDocument<200> doc;
+//     doc["temperature"] = temperature;
+//     doc["pressure"] = pressure;
+//     doc["humidity"] = humidity;
+//     doc["rpm"] = rpm;
+//     char payload[200];
+//     serializeJson(doc, payload);
 
-    // Add data to the queue
-    dataQueue.push(String(payload));
-    SerialMon.println("Data collected: ");
-    SerialMon.println(payload);
-}
+//     // Add data to the queue
+//     dataQueue.push(String(payload));
+//     SerialMon.println("Data collected: ");
+//     SerialMon.println(payload);
+// }
 
 
-void publishSensorData() {
-    // Publish data from the queue
-    while (!dataQueue.empty()) {
-        String payload = dataQueue.front();
-        dataQueue.pop();
-        mqtt.publish("GsmClientTest/sensorData", payload.c_str());
-        SerialMon.println("Data published: ");
-        SerialMon.println(payload);
+void setup() {
+    // Set console baud rate
+    SerialMon.begin(115200);
+    delay(10);
+
+    // Set serial for AT commands (to the module)
+    SerialAT.begin(UART_BAUD, SERIAL_8N1, PIN_RX, PIN_TX);
+
+    // Set serial for external device (Serial1)
+    Serial1.begin(115200, SERIAL_8N1, SERIAL1_RX_PIN, SERIAL1_TX_PIN);
+
+    // Initialize modem
+    SerialMon.println("Initializing modem...");
+    if (!modem.restart()) {
+        SerialMon.println("Failed to restart modem, attempting to continue without restarting");
+    } else {
+        SerialMon.println("Modem restarted successfully");
     }
+
+    String name = modem.getModemName();
+    SerialMon.print("Modem Name: ");
+    SerialMon.println(name);
+
+    String modemInfo = modem.getModemInfo();
+    SerialMon.print("Modem Info: ");
+    SerialMon.println(modemInfo);
+
+    // Unlock your SIM card with a PIN if needed
+    if (GSM_PIN && modem.getSimStatus() != 3) {
+        modem.simUnlock(GSM_PIN);
+    }
+
+    SerialMon.print("Waiting for network...");
+    if (!modem.waitForNetwork()) {
+        SerialMon.println(" fail");
+        delay(10000);
+        return;
+    }
+    SerialMon.println(" success");
+
+    if (modem.isNetworkConnected()) {
+        SerialMon.println("Network connected");
+    }
+
+    // GPRS connection parameters are usually set after network registration
+    SerialMon.print(F("Connecting to "));
+    SerialMon.print(apn);
+    if (!modem.gprsConnect(apn, gprsUser, gprsPass)) {
+        SerialMon.println(" fail");
+        delay(10000);
+        return;
+    }
+    SerialMon.println(" success");
+
+    if (modem.isGprsConnected()) {
+        SerialMon.println("GPRS connected");
+    }
+
+    // MQTT Broker setup
+    mqtt.setServer(broker, 1883);
+    mqtt.setCallback(mqttCallback);
 }
 
 
-//   void publishSensorData() {
-//      // Collect new data
-//      float temperature = random(-10,40);
-//      float pressure = random(950,1050);
-//      float humidity = random(0,100);
-//      float rpm = random(0,5000);
-//      // Create JSON payload
-//      StaticJsonDocument<200> doc;
-//      doc["temperature"] = temperature;
-//      doc["pressure"] = pressure;
-//      doc["humidity"] = humidity;
-//      doc["rpm"] = rpm;
-//      char payload[200];
-//      serializeJson(doc, payload);
- 
-//      // Publish data
-//      mqtt.publish("GsmClientTest/sensorData", payload);
-//      SerialMon.println("Data published: ");
-//      SerialMon.println(payload);
-//  }
-
- void setup()
- {
-     // Set console baud rate
-     Serial.begin(115200);
-     delay(10);
- 
-     // Set LED OFF
-     pinMode(LED_PIN, OUTPUT);
-     digitalWrite(LED_PIN, HIGH);
- 
-     pinMode(PWR_PIN, OUTPUT);
-     digitalWrite(PWR_PIN, HIGH);
-     // Starting the machine requires at least 1 second of low level, and with a level conversion, the levels are opposite
-     delay(1000);
-     digitalWrite(PWR_PIN, LOW);
- 
-     SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
-     if (!SD.begin(SD_CS)) {
-         Serial.println("SDCard MOUNT FAIL");
-     } else {
-         uint32_t cardSize = SD.cardSize() / (1024 * 1024);
-         String str = "SDCard Size: " + String(cardSize) + "MB";
-         Serial.println(str);
-     }
- 
-     Serial.println("\nWait...");
- 
-     delay(1000);
- 
-     SerialAT.begin(UART_BAUD, SERIAL_8N1, PIN_RX, PIN_TX);
- 
-     // Restart takes quite some time
-     // To skip it, call init() instead of restart()
-     Serial.println("Initializing modem...");
-     if (!modem.restart()) {
-         Serial.println("Failed to restart modem, attempting to continue without restarting");
-     }
- 
- 
- 
-     String name = modem.getModemName();
-     DBG("Modem Name:", name);
- 
-     String modemInfo = modem.getModemInfo();
-     DBG("Modem Info:", modemInfo);
- 
- 
-     // Unlock your SIM card with a PIN if needed
-     if (GSM_PIN && modem.getSimStatus() != 3) {
-         modem.simUnlock(GSM_PIN);
-     }
- 
- 
-     SerialMon.print("Waiting for network...");
-     if (!modem.waitForNetwork()) {
-         SerialMon.println(" fail");
-         delay(10000);
-         return;
-     }
-     SerialMon.println(" success");
- 
-     if (modem.isNetworkConnected()) {
-         SerialMon.println("Network connected");
-     }
- 
-     // GPRS connection parameters are usually set after network registration
-     SerialMon.print(F("Connecting to "));
-     SerialMon.print(apn);
-     if (!modem.gprsConnect(apn, gprsUser, gprsPass)) {
-         SerialMon.println(" fail");
-         delay(10000);
-         return;
-     }
-     SerialMon.println(" success");
- 
-     if (modem.isGprsConnected()) {
-         SerialMon.println("GPRS connected");
-     }
-
- 
-     // MQTT Broker setup
-     mqtt.setServer(broker, 1883);
-     mqtt.setCallback(mqttCallback);
- 
- }
- 
- void loop() {
+void loop() {
     // Make sure we're still registered on the network
     if (!modem.isNetworkConnected()) {
         SerialMon.println("Network disconnected");
@@ -349,7 +333,7 @@ void publishSensorData() {
         publishSensorData();
     }
 
-      // Print the number of unsent data in the queue
-      SerialMon.print("Unsent data in queue: ");
-      SerialMon.println(dataQueue.size());
+    // Print the number of unsent data in the queue
+    SerialMon.print("Unsent data in queue: ");
+    SerialMon.println(dataQueue.size());
 }
