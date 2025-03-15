@@ -107,9 +107,6 @@ unsigned long lastDataCollectionTime = 0; // Variable to store the last data col
  #define LED_PIN     12
  
  int ledStatus = LOW;
- unsigned long lastPublishTime = 0; // Variable to store the last publish time
- const unsigned long publishInterval = 100; // Interval to publish data (e.g., every 5 seconds)
- 
  uint32_t lastReconnectAttempt = 0;
  
  void mqttCallback(char *topic, byte *payload, unsigned int len)
@@ -294,7 +291,7 @@ void publishSensorData() {
  
  }
  
- oid loop() {
+ void loop() {
     // Make sure we're still registered on the network
     if (!modem.isNetworkConnected()) {
         SerialMon.println("Network disconnected");
@@ -351,4 +348,8 @@ void publishSensorData() {
         lastPublishTime = currentMillis;
         publishSensorData();
     }
+
+      // Print the number of unsent data in the queue
+      SerialMon.print("Unsent data in queue: ");
+      SerialMon.println(dataQueue.size());
 }
