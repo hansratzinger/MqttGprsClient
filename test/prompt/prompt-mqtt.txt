@@ -7,3 +7,5 @@ Hardware Lilygo SIM7000G
  -------------
 
  Wir müssen jetzt eine serielle Verbindung implementieren. Im derzeitigen Code publishen wir demo daten. Die realen Daten werden seriell im MQTT Format in dieses Programm übertragen. 
+
+ Als nächstes werden wir einen backup auf die sd-card integrieren. Es sollten alle einlangenden Seriellen daten mit einem Timestamp versehen gespeichert werden. Der Timestanp sollte von einem Internet-Timeserver geliefert werden. Pro Tag sollte eine neue csv-file angelegt werden.
