@@ -18,16 +18,16 @@
 #define SerialUART Serial2
 
 // See all AT commands, if wanted
-#define DUMP_AT_COMMANDS
+// #define DUMP_AT_COMMANDS
 
 // Define the serial console for debug prints, if needed
-#define TINY_GSM_DEBUG SerialMon
+// #define TINY_GSM_DEBUG SerialMon
 
 #define TINY_GSM_USE_GPRS true
 #define TINY_GSM_USE_WIFI false
 
 #define uS_TO_S_FACTOR 1000000ULL  // Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP  10          // Time ESP32 will go to sleep (in seconds)
+// #define TIME_TO_SLEEP  10          // Time ESP32 will go to sleep (in seconds)
 
 #define UART_BAUD  115200
 #define AT_BAUD    115200
@@ -57,7 +57,7 @@
 #include <queue>
 #include <ArduinoJson.h>
 #include "time.h"
-#include <iostream>
+// #include <iostream>
 
 // Your GPRS credentials, if any
 const char apn[]      = "hologram";
@@ -65,13 +65,20 @@ const char gprsUser[] = "";
 const char gprsPass[] = "";
 
 // MQTT details
-const char *broker = "test.mosquitto.org";
+// const char broker[] = "broker.hivemq.com";
+const char broker[] = "test.mosquitto.org";
+// const char broker[] = "194c32edd2ba406fb8ecdba22f6f7816.s1.eu.hivemq.cloud";
+int port = 1883;
 
-const char *topicLed       = "TowerStation/led";
-const char *topicInit      = "TowerStation/init";
-const char *topicLedStatus = "TowerStation/ledStatus";
-const char* topicPosition = "TowerStation/Position"; // Topic for sensor data
-const char* topicRpm = "TowerStation/Rpm"; // Topic for sensor data
+const char* topicLed       = "gruenthal99/led";
+const char* topicInit      = "gruenthal99/init";
+const char* topicLedStatus = "gruenthal99/ledStatus";
+const char* topicPosition = "gruenthal99/Position"; // Topic for sensor data
+const char* topicRpm = "gruenthal99/Rpm"; // Topic for sensor data
+
+const char clientID[] = "gruenthal99";
+const char user[] = "towerstation2025";
+const char password[] = "SkaYbXphGO4BTZxmleZx";
 
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = 0;
@@ -262,14 +269,17 @@ boolean mqttConnect() {
     SerialMon.print(broker);
 
     // Connect to MQTT Broker
-    boolean status = mqtt.connect("GsmClientTest");
+    // boolean status = mqtt.connect("GsmClientTest");
+    boolean status = mqtt.connect(clientID);
 
     // Or, if you want to authenticate MQTT:
-    // boolean status = mqtt.connect("GsmClientName", "mqtt_user", "mqtt_pass");
+    // boolean status = mqtt.connect(clientID, user, password);
 
     if (status == false) {
         SerialMon.println(" fail");
         return false;
+    } else {
+        SerialMon.println(" MQTT connected successfully");
     }
 
     String time = String(millis());
@@ -373,17 +383,17 @@ void setup() {
     if (modemInitialized) {
         SerialMon.print("Connecting to ");  
         SerialMon.print(broker);
-        mqtt.setServer(broker, 1883);
+        mqtt.setServer(broker, port);
         mqtt.setCallback(mqttCallback);
         SerialMon.println(" success");
     }
 
-    delay(1000);
+    // delay(1000);
     
-    SerialMon.println("Looking for the NTP time...");
-    // Init and get the time
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-    printLocalTime();
+    // SerialMon.println("Looking for the NTP time...");
+    // // Init and get the time
+    // configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    // printLocalTime();
 
     delay(1000);
 
@@ -445,7 +455,7 @@ void loop() {
         lastDataCollectionTime = currentMillis;
         collectSensorData();
     }
-
+    delay(100);
     // Publish new data at regular intervals
     if (currentMillis - lastPublishTime >= publishInterval) {
         lastPublishTime = currentMillis;

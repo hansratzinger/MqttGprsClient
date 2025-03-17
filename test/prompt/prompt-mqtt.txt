@@ -9,3 +9,12 @@ Hardware Lilygo SIM7000G
  Wir müssen jetzt eine serielle Verbindung implementieren. Im derzeitigen Code publishen wir demo daten. Die realen Daten werden seriell im MQTT Format in dieses Programm übertragen. 
 
  Als nächstes werden wir einen backup auf die sd-card integrieren. Es sollten alle einlangenden Seriellen daten mit einem Timestamp versehen gespeichert werden. Der Timestanp sollte von einem Internet-Timeserver geliefert werden. Pro Tag sollte eine neue csv-file angelegt werden.
+
+ ich benötige eine funktion die Daten die über Serial2 empfangen werden in eine neues JSON format bringt.
+
+ Input über serial2:
+ {"id":1,"type":16,"data":7077}
+ {"id":1,"type":20,"data":480}
+
+ Output MQTT:
+ Topic,{"id":id,{type:data,type:data}}
