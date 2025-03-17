@@ -70,11 +70,12 @@ const char broker[] = "test.mosquitto.org";
 // const char broker[] = "194c32edd2ba406fb8ecdba22f6f7816.s1.eu.hivemq.cloud";
 int port = 1883;
 
-const char* topicLed       = "gruenthal99/led";
-const char* topicInit      = "gruenthal99/init";
-const char* topicLedStatus = "gruenthal99/ledStatus";
-const char* topicPosition = "gruenthal99/Position"; // Topic for sensor data
-const char* topicRpm = "gruenthal99/Rpm"; // Topic for sensor data
+const char* topicLed       = "NickGhResearch/led";
+const char* topicInit      = "NickGhResearch/init";
+const char* topicLedStatus = "NickGhResearch/ledStatus";
+const char* topicPosition = "NickGhResearch/Position"; // Topic for sensor data
+const char* topicRpm1 = "NickGhResearch/Rpm1"; // Topic for sensor data
+const char* topicRpm2 = "NickGhResearch/Rpm2"; // Topic for sensor data
 
 const char clientID[] = "gruenthal99";
 const char user[] = "towerstation2025";
@@ -115,11 +116,11 @@ extern "C" {
     }
 }
 
-
 int getTopic(String payload) {
     std::string str = payload.c_str();
     std::string id1 = "\"id\":1,";
     std::string id2 = "\"id\":2,";
+    std::string id5 = "\"id\":5,";
     
     // Suchen nach dem Substring id1
     if (str.find(id1) != std::string::npos) {
@@ -128,6 +129,10 @@ int getTopic(String payload) {
     // Suchen nach dem Substring id2
     if (str.find(id2) != std::string::npos) {
         return 2;
+    }    
+    // Suchen nach dem Substring id5
+    if (str.find(id5) != std::string::npos) {
+        return 5;
     }
     // Wenn keiner der Substrings gefunden wird, gib 0 zurück
     return 0;
@@ -194,20 +199,81 @@ void saveDataToSD(const String& data) {
 
 void collectSensorData() {
     // Collect new data from Serial1
-    SerialMon.println("Collecting sensor data...");
+    // SerialMon.println("Collecting sensor data...");
     if (SerialUART.available() > 0) {
-        SerialMon.println("Serial1 data available");
+        // SerialMon.println("Serial1 data available");
         String data = SerialUART.readStringUntil('\n');
         dataQueue.push(data);
         SerialMon.println("Data collected: ");
         SerialMon.println(data);
-
+        delay(100);
         // Save data to SD card
         saveDataToSD(data);
     } else {
         SerialMon.println("No data available on Serial1");
     }
 }
+
+// Function to validate and translate JSON data
+bool validateAndTranslateJson(String& payload) {
+    StaticJsonDocument<256> doc;
+    DeserializationError error = deserializeJson(doc, payload);
+    if (error) {
+        SerialMon.print(F("deserializeJson() failed: "));
+        SerialMon.println(error.f_str());
+        return false;
+    }
+
+    // Check if required fields are present
+    if (!doc.containsKey("id") || !doc.containsKey("type") || !doc.containsKey("data")) {
+        SerialMon.println(F("Invalid JSON structure"));
+        return false;
+    }
+
+    // Translate numeric type to alphanumeric data type
+    int type = doc["type"];
+    switch (type) {
+        case 16:
+            doc["type"] = "BOARDTIME";
+            break;
+        case 20:
+            doc["type"] = "RPM";
+            break;
+        case 21:
+            doc["type"] = "LATITUDE";
+            break;
+        case 22:
+            doc["type"] = "LONGITUDE";
+            break;
+        case 25:
+            doc["type"] = "YEAR";
+            break;
+        case 26:
+            doc["type"] = "MONTH";
+            break;
+        case 27:
+            doc["type"] = "DAY";
+            break;
+        case 28:
+            doc["type"] = "HOUR";
+            break;
+        case 29:
+            doc["type"] = "MINUTE";
+            break;
+        case 30:
+            doc["type"] = "SECOND";
+            break;
+        default:
+            SerialMon.println(F("Unknown type"));
+            return false;
+    }
+
+    // Serialize the modified JSON back to the payload
+    payload = "";
+    serializeJson(doc, payload);
+    return true;
+}
+
 
 // Publish data from the queue
 void publishSensorData() {
@@ -221,8 +287,17 @@ void publishSensorData() {
     while (!dataQueue.empty()) {
         String payload = dataQueue.front();
         dataQueue.pop();
+
+        // Validate and translate JSON data
+        if (!validateAndTranslateJson(payload)) {
+            SerialMon.println("Invalid data, skipping publish");
+            continue;
+        }
+
         if (getTopic(payload) == 1) {
-            pubOK = mqtt.publish(topicRpm, payload.c_str());
+            pubOK = mqtt.publish(topicRpm1, payload.c_str());
+        } else if (getTopic(payload) == 5) {
+            pubOK = mqtt.publish(topicRpm2, payload.c_str());    
         } else if (getTopic(payload) == 2) {
             pubOK = mqtt.publish(topicPosition, payload.c_str());    
         } else {
@@ -237,9 +312,11 @@ void publishSensorData() {
             SerialMon.println("Failed to publish data, re-queued: ");
             SerialMon.println(payload);
             break; // Exit the loop to avoid infinite loop
-        }  // Get the topic based on the payloads id
+        }
     }
 }
+
+
 
 void mqttCallback(char *topic, byte *payload, unsigned int len)
 { 
@@ -357,6 +434,13 @@ void setup() {
     delay(1000);
     digitalWrite(PWR_PIN, LOW);
 
+    // Starting SD card 
+        
+    pinMode (SD_SCLK, INPUT_PULLUP);
+    pinMode (SD_MISO, INPUT_PULLUP);
+    pinMode (SD_MOSI, INPUT_PULLUP);
+    pinMode (SD_CS, INPUT_PULLUP);
+
     SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
     if (!SD.begin(SD_CS)) {
         SerialMon.println("SDCard MOUNT FAIL");
@@ -395,7 +479,7 @@ void setup() {
     // configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
     // printLocalTime();
 
-    delay(1000);
+    delay(500);
 
     SerialMon.println("Setup completed.");
 }
@@ -461,9 +545,10 @@ void loop() {
         lastPublishTime = currentMillis;
         publishSensorData();
     }
-
+    delay(100);
     // Print the number of unsent data in the queue
-    SerialMon.print("Unsent data in queue: ");
-    SerialMon.println(dataQueue.size());
-    SerialMon.println("Loop completed.");
+    if (dataQueue.size() > 0) {
+        SerialMon.print("Unsent data in queue: ");
+        SerialMon.println(dataQueue.size());
+    }
 }
