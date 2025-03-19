@@ -207,8 +207,8 @@ void collectSensorData() {
         SerialMon.println("Data collected: ");
         SerialMon.println(data);
         delay(100);
-        // Save data to SD card
-        saveDataToSD(data);
+        // // Save data to SD card
+        // saveDataToSD(data);
     } else {
         SerialMon.println("No data available on Serial1");
     }
@@ -216,64 +216,62 @@ void collectSensorData() {
 
 // Function to validate and translate JSON data
 bool validateAndTranslateJson(String& payload) {
-    StaticJsonDocument<256> doc;
-    DeserializationError error = deserializeJson(doc, payload);
+    DynamicJsonDocument obj(1024); // Specify an appropriate size for the JSON document
+    DeserializationError error = deserializeJson(obj, payload);
     if (error) {
         SerialMon.print(F("deserializeJson() failed: "));
         SerialMon.println(error.f_str());
         return false;
     }
 
-    // Check if required fields are present
-    if (!doc.containsKey("id") || !doc.containsKey("type") || !doc.containsKey("data")) {
-        SerialMon.println(F("Invalid JSON structure"));
+    // Prüfen, ob die Daten ein Array sind
+    if (!obj.is<JsonArray>()) {
+        SerialMon.println(F("Invalid JSON structure: Expected an array"));
         return false;
     }
 
-    // Translate numeric type to alphanumeric data type
-    int type = doc["type"];
-    switch (type) {
-        case 16:
-            doc["type"] = "BOARDTIME";
-            break;
-        case 20:
-            doc["type"] = "RPM";
-            break;
-        case 21:
-            doc["type"] = "LATITUDE";
-            break;
-        case 22:
-            doc["type"] = "LONGITUDE";
-            break;
-        case 25:
-            doc["type"] = "YEAR";
-            break;
-        case 26:
-            doc["type"] = "MONTH";
-            break;
-        case 27:
-            doc["type"] = "DAY";
-            break;
-        case 28:
-            doc["type"] = "HOUR";
-            break;
-        case 29:
-            doc["type"] = "MINUTE";
-            break;
-        case 30:
-            doc["type"] = "SECOND";
-            break;
-        default:
-            SerialMon.println(F("Unknown type"));
+    // Überprüfen jedes Objekts im Array
+    for (JsonObject obj : obj.as<JsonArray>()) {
+        if (!obj["id"].is<int>() || !obj["type"].is<int>() || !obj["data"].is<float>()) {
+            SerialMon.println(F("Invalid JSON structure in array element"));
             return false;
+        }
+
+        // Übersetzen des numerischen Typs in alphanumerischen Typ
+        int type = obj["type"];
+        switch (type) {
+            case 1:
+                obj["type"] = "DATE";
+                break;
+            case 2:
+                obj["type"] = "UTC";
+                break;
+            case 16:
+                obj["type"] = "BOARDTIME_SEC";
+                break;
+            case 20:
+                obj["type"] = "RPM";
+                break;
+            case 21:
+                obj["type"] = "LATITUDE";
+                break;
+            case 22:
+                obj["type"] = "LONGITUDE";
+                break;
+            case 28:
+                obj["type"] = "POSITION_DISTANCE";
+                break;
+            default:
+                SerialMon.println(F("Unknown type in array element"));
+                return false;
+        }
     }
 
-    // Serialize the modified JSON back to the payload
+    // Serialisiere die modifizierten Daten zurück in den Payload
     payload = "";
-    serializeJson(doc, payload);
+    serializeJson(obj, payload);
     return true;
 }
-
 
 // Publish data from the queue
 void publishSensorData() {
@@ -287,7 +285,7 @@ void publishSensorData() {
     while (!dataQueue.empty()) {
         String payload = dataQueue.front();
         dataQueue.pop();
-
+        SerialMon.println("Raw data received: " + payload);
         // Validate and translate JSON data
         if (!validateAndTranslateJson(payload)) {
             SerialMon.println("Invalid data, skipping publish");
@@ -435,22 +433,20 @@ void setup() {
     digitalWrite(PWR_PIN, LOW);
 
     // Starting SD card 
-        
-    pinMode (SD_SCLK, INPUT_PULLUP);
-    pinMode (SD_MISO, INPUT_PULLUP);
-    pinMode (SD_MOSI, INPUT_PULLUP);
-    pinMode (SD_CS, INPUT_PULLUP);
+    // pinMode (SD_SCLK, INPUT_PULLUP);
+    // pinMode (SD_MISO, INPUT_PULLUP);
+    // pinMode (SD_MOSI, INPUT_PULLUP);
+    // pinMode (SD_CS, INPUT_PULLUP);
 
-    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
-    if (!SD.begin(SD_CS)) {
-        SerialMon.println("SDCard MOUNT FAIL");
-    } else {
-        uint32_t cardSize = SD.cardSize() / (1024 * 1024);
-        String str = "SDCard Size: " + String(cardSize) + "MB";
-        SerialMon.println(str);
-    }
-
-    SerialMon.println("\nWait...");
+    // SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+    // if (!SD.begin(SD_CS)) {
+    //     SerialMon.println("SDCard MOUNT FAIL");
+    // } else {
+    //     uint32_t cardSize = SD.cardSize() / (1024 * 1024);
+    //     String str = "SDCard Size: " + String(cardSize) + "MB";
+    //     SerialMon.println(str);
+    // }
+    // SerialMon.println("\nWait...");
 
     delay(100);
 
