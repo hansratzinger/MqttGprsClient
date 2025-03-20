@@ -2,7 +2,8 @@
  * MqttGprsClient.cpp
  * uses the GPRS module to connect to the internet and send data to an MQTT broker.
  * based on the TinyGSM and PubSubClient libraries
- * HR 2025-03-15  NK
+ * Requires a SIM card with GPRS data plan
+ * Release 1.0.0 HR 2025-03-2025 NK
  **************************************************************/
 // branch getSerialFromGateway
 #define TINY_GSM_MODEM_SIM7000
