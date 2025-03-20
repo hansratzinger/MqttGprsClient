@@ -105,7 +105,8 @@ Ticker tick;
 
 struct tm timeinfo;
 
-std::queue<String> dataQueue; // Queue to store the data
+std::queue<String> dataQueueId1; // Queue für Daten von id:1
+std::queue<String> dataQueueId2; // Queue für Daten von id:2
 
 int ledStatus = LOW;
 uint32_t lastReconnectAttempt = 0;
@@ -199,42 +200,68 @@ void saveDataToSD(const String& data) {
 }
 
 void collectSensorData() {
-    // Collect new data from Serial1
-    // SerialMon.println("Collecting sensor data...");
     if (SerialUART.available() > 0) {
-        // SerialMon.println("Serial1 data available");
         String data = SerialUART.readStringUntil('\n');
-        dataQueue.push(data);
-        SerialMon.println("Data collected: ");
-        SerialMon.println(data);
-        delay(100);
-        // // Save data to SD card
-        // saveDataToSD(data);
+        SerialMon.println("Raw data collected: " + data);
+
+        // Prüfen, ob die Daten gültig sind
+        StaticJsonDocument<512> doc;
+        DeserializationError error = deserializeJson(doc, data);
+        if (error) {
+            SerialMon.print("Invalid JSON data received: ");
+            SerialMon.println(error.f_str());
+            return;
+        }
+
+        // Prüfen, ob die Daten ein Array sind
+        if (!doc.is<JsonArray>()) {
+            SerialMon.println("Invalid JSON structure: Expected an array");
+            return;
+        }
+
+        // Iterieren durch die Elemente des Arrays
+        for (JsonObject obj : doc.as<JsonArray>()) {
+            if (!obj.containsKey("id")) {
+                SerialMon.println("Missing 'id' field in JSON object");
+                continue;
+            }
+
+            int id = obj["id"];
+            String element;
+            serializeJson(obj, element);
+
+            if (id == 1) {
+                dataQueueId1.push(element);
+                SerialMon.println("Data added to queue for id:1: " + element);
+            } else if (id == 2) {
+                dataQueueId2.push(element);
+                SerialMon.println("Data added to queue for id:2: " + element);
+            } else {
+                SerialMon.println("Unknown ID, skipping data");
+            }
+        }
     } else {
-        SerialMon.println("No data available on Serial1");
+        SerialMon.println("No data available on SerialUART");
     }
 }
 
 // Function to validate and translate JSON data
 bool validateAndTranslateJson(String& payload) {
-    DynamicJsonDocument obj(1024); // Specify an appropriate size for the JSON document
-    DeserializationError error = deserializeJson(obj, payload);
+    DynamicJsonDocument doc(1024); // Verwenden Sie DynamicJsonDocument
+    DeserializationError error = deserializeJson(doc, payload);
     if (error) {
         SerialMon.print(F("deserializeJson() failed: "));
         SerialMon.println(error.f_str());
         return false;
     }
 
-    // Prüfen, ob die Daten ein Array sind
-    if (!obj.is<JsonArray>()) {
-        SerialMon.println(F("Invalid JSON structure: Expected an array"));
-        return false;
-    }
+    // Prüfen, ob die Daten ein einzelnes Objekt oder ein Array sind
+    if (doc.is<JsonObject>()) {
+        JsonObject obj = doc.as<JsonObject>();
 
-    // Überprüfen jedes Objekts im Array
-    for (JsonObject obj : obj.as<JsonArray>()) {
+        // Prüfen, ob die erforderlichen Felder vorhanden sind
         if (!obj["id"].is<int>() || !obj["type"].is<int>() || !obj["data"].is<float>()) {
-            SerialMon.println(F("Invalid JSON structure in array element"));
+            SerialMon.println(F("Invalid JSON structure in object"));
             return false;
         }
 
@@ -263,59 +290,107 @@ bool validateAndTranslateJson(String& payload) {
                 obj["type"] = "POSITION_DISTANCE";
                 break;
             default:
-                SerialMon.println(F("Unknown type in array element"));
+                SerialMon.println(F("Unknown type in object"));
                 return false;
         }
+    } else if (doc.is<JsonArray>()) {
+        SerialMon.println(F("Unexpected JSON structure: Array received, but object expected"));
+        return false;
+    } else {
+        SerialMon.println(F("Invalid JSON structure: Neither object nor array"));
+        return false;
     }
 
     // Serialisiere die modifizierten Daten zurück in den Payload
     payload = "";
-    serializeJson(obj, payload);
+    serializeJson(doc, payload);
     return true;
 }
 
 // Publish data from the queue
 void publishSensorData() {
     bool pubOK = false;
-    if (!modemInitialized) {
-        SerialMon.println("Modem not initialized, skipping MQTT publish");
-        return;
-    }
 
-    SerialMon.println("Publishing sensor data...");
-    while (!dataQueue.empty()) {
-        String payload = dataQueue.front();
-        dataQueue.pop();
-        SerialMon.println("Raw data received: " + payload);
-        // Validate and translate JSON data
+    // JSON-Objekt für id:1 erstellen
+    DynamicJsonDocument id1Doc(512);
+    id1Doc["id"] = 1;
+    JsonObject id1Data = id1Doc.createNestedObject("data");
+
+    // Verarbeite die Daten von id:1
+    while (!dataQueueId1.empty()) {
+        String payload = dataQueueId1.front();
+        dataQueueId1.pop();
+        SerialMon.println("Processing data for id:1: " + payload);
+
         if (!validateAndTranslateJson(payload)) {
-            SerialMon.println("Invalid data, skipping publish");
+            SerialMon.println("Invalid data for id:1, skipping publish");
             continue;
         }
 
-        if (getTopic(payload) == 1) {
-            pubOK = mqtt.publish(topicRpm1, payload.c_str());
-        } else if (getTopic(payload) == 5) {
-            pubOK = mqtt.publish(topicRpm2, payload.c_str());    
-        } else if (getTopic(payload) == 2) {
-            pubOK = mqtt.publish(topicPosition, payload.c_str());    
-        } else {
-            SerialMon.println("Unknown topic"); 
-        }
+        // JSON-Daten des aktuellen Elements parsen
+        DynamicJsonDocument tempDoc(256);
+        deserializeJson(tempDoc, payload);
+        JsonObject obj = tempDoc.as<JsonObject>();
+
+        // Füge den `type`-Wert als Schlüssel hinzu
+        const char* type = obj["type"];
+        id1Data[type] = obj["data"];
+    }
+
+    // Veröffentliche die gesammelten Daten von id:1, wenn sie nicht leer sind
+    if (!id1Data.isNull() && id1Data.size() > 0) {
+        String output;
+        serializeJson(id1Doc, output);
+        pubOK = mqtt.publish(topicRpm1, output.c_str());
         if (pubOK) {
-            SerialMon.println("Data published: ");
-            SerialMon.println(payload);
+            SerialMon.println("Data published for id:1: " + output);
         } else {
-            // If publish fails, push the data back to the queue
-            dataQueue.push(payload);
-            SerialMon.println("Failed to publish data, re-queued: ");
-            SerialMon.println(payload);
-            break; // Exit the loop to avoid infinite loop
+            SerialMon.println("Failed to publish data for id:1");
         }
+    } else {
+        SerialMon.println("No valid data for id:1, skipping publish");
+    }
+
+    // JSON-Objekt für id:2 erstellen
+    DynamicJsonDocument id2Doc(512);
+    id2Doc["id"] = 2;
+    JsonObject id2Data = id2Doc.createNestedObject("data");
+
+    // Verarbeite die Daten von id:2
+    while (!dataQueueId2.empty()) {
+        String payload = dataQueueId2.front();
+        dataQueueId2.pop();
+        SerialMon.println("Processing data for id:2: " + payload);
+
+        if (!validateAndTranslateJson(payload)) {
+            SerialMon.println("Invalid data for id:2, skipping publish");
+            continue;
+        }
+
+        // JSON-Daten des aktuellen Elements parsen
+        DynamicJsonDocument tempDoc(256);
+        deserializeJson(tempDoc, payload);
+        JsonObject obj = tempDoc.as<JsonObject>();
+
+        // Füge den `type`-Wert als Schlüssel hinzu
+        const char* type = obj["type"];
+        id2Data[type] = obj["data"];
+    }
+
+    // Veröffentliche die gesammelten Daten von id:2, wenn sie nicht leer sind
+    if (!id2Data.isNull() && id2Data.size() > 0) {
+        String output;
+        serializeJson(id2Doc, output);
+        pubOK = mqtt.publish(topicPosition, output.c_str());
+        if (pubOK) {
+            SerialMon.println("Data published for id:2: " + output);
+        } else {
+            SerialMon.println("Failed to publish data for id:2");
+        }
+    } else {
+        SerialMon.println("No valid data for id:2, skipping publish");
     }
 }
-
-
 
 void mqttCallback(char *topic, byte *payload, unsigned int len)
 { 
@@ -421,8 +496,11 @@ void setup() {
     // Set console baud rate
     SerialMon.println("Setup started...");
     SerialMon.begin(115200);
-    delay(10);
-    
+    SerialMon.println("=====================================");
+    SerialMon.println("======= MQTT-GPRS-CLIENT ============");
+    SerialMon.println("=====================================");
+    delay(1000);
+
     // Set LED OFF
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, HIGH);
@@ -432,22 +510,6 @@ void setup() {
     // Starting the machine requires at least 1 second of low level, and with a level conversion, the levels are opposite
     delay(1000);
     digitalWrite(PWR_PIN, LOW);
-
-    // Starting SD card 
-    // pinMode (SD_SCLK, INPUT_PULLUP);
-    // pinMode (SD_MISO, INPUT_PULLUP);
-    // pinMode (SD_MOSI, INPUT_PULLUP);
-    // pinMode (SD_CS, INPUT_PULLUP);
-
-    // SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
-    // if (!SD.begin(SD_CS)) {
-    //     SerialMon.println("SDCard MOUNT FAIL");
-    // } else {
-    //     uint32_t cardSize = SD.cardSize() / (1024 * 1024);
-    //     String str = "SDCard Size: " + String(cardSize) + "MB";
-    //     SerialMon.println(str);
-    // }
-    // SerialMon.println("\nWait...");
 
     delay(100);
 
@@ -469,13 +531,6 @@ void setup() {
         SerialMon.println(" success");
     }
 
-    // delay(1000);
-    
-    // SerialMon.println("Looking for the NTP time...");
-    // // Init and get the time
-    // configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-    // printLocalTime();
-
     delay(500);
 
     SerialMon.println("Setup completed.");
@@ -483,7 +538,7 @@ void setup() {
 
 void loop() {
     // Make sure we're still registered on the network
-    SerialMon.println("Loop started...");
+    // SerialMon.println("Loop started...");
     if (modemInitialized && !modem.isNetworkConnected()) {
         SerialMon.println("Network disconnected");
         if (!modem.waitForNetwork(180000L, true)) {
@@ -521,7 +576,6 @@ void loop() {
                 lastReconnectAttempt = 0;
             }
         }
-        // delay(100);
         return;
     }
 
@@ -536,16 +590,18 @@ void loop() {
         lastDataCollectionTime = currentMillis;
         collectSensorData();
     }
-    // delay(100);
+
     // Publish new data at regular intervals
     if (currentMillis - lastPublishTime >= publishInterval) {
         lastPublishTime = currentMillis;
         publishSensorData();
     }
-    // delay(100);
-    // Print the number of unsent data in the queue
-    if (dataQueue.size() > 0) {
-        SerialMon.print("Unsent data in queue: ");
-        SerialMon.println(dataQueue.size());
+
+    // Print the number of unsent data in the queues
+    if (!dataQueueId1.empty() || !dataQueueId2.empty()) {
+        SerialMon.print("Unsent data in queue for id:1: ");
+        SerialMon.println(dataQueueId1.size());
+        SerialMon.print("Unsent data in queue for id:2: ");
+        SerialMon.println(dataQueueId2.size());
     }
 }
