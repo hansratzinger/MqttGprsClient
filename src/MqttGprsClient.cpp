@@ -36,6 +36,7 @@
 #define AT_PIN_RX      26
 #define UART_RX_PIN    33 // Define RX pin for Serial1
 #define UART_TX_PIN    32 // Define TX pin for Serial1
+#define UART_RX_BUFFER_SIZE 1024 // Erhöhen Sie die Puffergröße
 #define PWR_PIN        4
 
 #define SD_MISO        2
@@ -501,7 +502,7 @@ void loop() {
             SerialMon.print(apn);
             if (!modem.gprsConnect(apn, gprsUser, gprsPass)) {
                 SerialMon.println(" fail");
-                delay(10000);
+                delay(1000);
                 return;
             }
             if (modem.isGprsConnected()) {
@@ -520,7 +521,7 @@ void loop() {
                 lastReconnectAttempt = 0;
             }
         }
-        delay(100);
+        // delay(100);
         return;
     }
 
@@ -535,13 +536,13 @@ void loop() {
         lastDataCollectionTime = currentMillis;
         collectSensorData();
     }
-    delay(100);
+    // delay(100);
     // Publish new data at regular intervals
     if (currentMillis - lastPublishTime >= publishInterval) {
         lastPublishTime = currentMillis;
         publishSensorData();
     }
-    delay(100);
+    // delay(100);
     // Print the number of unsent data in the queue
     if (dataQueue.size() > 0) {
         SerialMon.print("Unsent data in queue: ");
