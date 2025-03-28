@@ -72,6 +72,7 @@ const char broker[] = "test.mosquitto.org";
 // const char broker[] = "194c32edd2ba406fb8ecdba22f6f7816.s1.eu.hivemq.cloud";
 int port = 1883;
 
+const char* topicTest       = "NickGhResearch/test";
 const char* topicLed       = "NickGhResearch/led";
 const char* topicInit      = "NickGhResearch/init";
 const char* topicLedStatus = "NickGhResearch/ledStatus";
@@ -493,6 +494,22 @@ void initializeModem() {
     }
 }
 
+void testPublishIfNoData() {
+    // Überprüfen, ob keine Daten über UART empfangen werden
+    if (SerialUART.available() == 0) {
+        // Erstelle das Payload mit millis()
+        String payload = String(millis());
+
+        // Veröffentliche das Payload an das Topic "test-mqtt"
+        bool pubOK = mqtt.publish(topicTest, payload.c_str());
+        if (pubOK) {
+            SerialMon.println("Test message published to 'test-mqtt': " + payload);
+        } else {
+            SerialMon.println("Failed to publish test message to 'test-mqtt'");
+        }
+    }
+}
+
 void setup() {
     // Set console baud rate
     SerialMon.println("Setup started...");
@@ -596,6 +613,7 @@ void loop() {
     if (currentMillis - lastPublishTime >= publishInterval) {
         lastPublishTime = currentMillis;
         publishSensorData();
+        testPublishIfNoData();
     }
 
     // Print the number of unsent data in the queues
